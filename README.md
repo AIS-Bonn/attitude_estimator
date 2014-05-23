@@ -28,8 +28,11 @@ Attitude Estimator was developed as part of the [NimbRo-OP](http://www.nimbro.ne
 This library is implemented as a collection of platform-independent C++ source files. To get started just clone the `attitude_estimator` repository.
 
 There are three ways of using the library:
+
 1. Directly include the source files in your project, and build them with the rest of your project.
+
 2. Build a static library (e.g. `*.a` or `*.lib`) of the source code and link your project to it.
+
 3. Build a dynamic library (e.g. `*.so` or `*.dll`) of the source code and link your project to it.
 
 Due to the small and efficient nature of the library, one of the first two options is recommended. Very minimal benefit is expected from building a dynamic library.
