@@ -1,14 +1,14 @@
 #Attitude Estimator#
 **Author:** Philipp Allgeuer
 
-**Version:** 1.0.1
+**Version:** 1.2.0
 
-**Date:** 16/05/14
+**Date:** 14/08/14
 
 ##General Overview##
-Attitude Estimator is a generic platform-independent C++ library that implements an IMU sensor fusion algorithm. Up to 3-axis gyroscope, accelerometer and magnetometer data can be processed into a full 3D quaternion orientation estimate, with the use of a nonlinear Passive Complementary Filter. The library is targeted at robotic applications, but is by no means limited to this. Features of the estimator include gyro bias estimation, transient quick learning phases, tuneable estimator parameters, and near-global stability backed by theoretical analysis.
+Attitude Estimator is a generic platform-independent C++ library that implements an IMU sensor fusion algorithm. Up to 3-axis gyroscope, accelerometer and magnetometer data can be processed into a full 3D quaternion orientation estimate, with the use of a nonlinear Passive Complementary Filter. The library is targeted at robotic applications, but is by no means limited to this. Features of the estimator include gyro bias estimation, transient quick learning, multiple estimation algorithms, tuneable estimator parameters, and near-global stability backed by theoretical analysis.
 
-Great emphasis has been placed on having a very efficient, yet totally numerically and algorithmically robust implementation of the filter. The code size has also been kept to a minimum, and has been extremely well-commented. The programmatic interface has also been made as easy to use as possible. Please refer to the extensive documentation of the library for more information on its capabilities and usage caveats.
+Great emphasis has been placed on having a very efficient, yet totally numerically and algorithmically robust implementation of the filter. The code size has also been kept to a minimum, and has been extremely well-commented. The programmatic interface has also been made as easy as possible. Please refer to the extensive documentation of the library for more information on its capabilities and usage caveats.
 
 Attitude Estimator was developed as part of the [NimbRo-OP](http://www.nimbro.net/OP/) project at the University of Bonn.
 
@@ -17,6 +17,7 @@ Attitude Estimator was developed as part of the [NimbRo-OP](http://www.nimbro.ne
 - Implements fusion of IMU sensor data (3-axis gyroscope, 3-axis accelerometer, 3-axis magnetometer), forming a reliable 3D attitude (orientation) estimate in the form of a quaternion
 - Able to dynamically deal with missing or non-present sensor data, even if there is theoretically no longer enough information to reconstruct a full 3D attitude
 - Gyro bias estimation, tuneable algorithm parameters, interface to provide state/system priors if desired
+- Multiple fallback estimation algorithms to choose from, including the ZYX yaw method, fused yaw method, and absolute fused yaw method
 - Transient quick learning phase for fast initial settling of the attitude estimate
 - Guaranteed numerical and algorithmic stability, with much effort having gone into ensuring the complete robustness of the implementation
 - Independent code with no external dependencies other than certain maths functions of the C++ Standard Library
@@ -37,9 +38,9 @@ There are three ways of using the library:
 
 Due to the small and efficient nature of the library, one of the first two options is recommended. Very minimal benefit is expected from building a dynamic library.
 
-Note that as at release `v1.0.1`, the required source files are simply `attitude_estimator.h` and `attitude_estimator.cpp`.
+Note that as at release `v1.2.0`, the required (non-test) source files are simply `attitude_estimator.h` and `attitude_estimator.cpp`.
 
-A sample makefile for building the static and dynamic libraries using `gcc` is included in the release. As mentioned in the makefile however, the Attitude Estimator could equivalently be built using any other compiler, such as for example MSVC.
+A sample makefile for building the static and dynamic libraries using `gcc` is included in the release. The makefile also demonstrates how the `test_attitude_estimator` unit test can be built. As mentioned in the makefile however, the Attitude Estimator could equivalently be built using any other compiler, such as for example MSVC.
 
 ##Dependencies##
 The library does not require C++11, and has no external dependencies other than the C++ Standard Library, of which only `cmath` is required. More precisely, the only standard library functions that are required are `abs`, `sqrt`, `asin` and `atan2`.

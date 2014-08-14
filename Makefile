@@ -10,14 +10,18 @@
 # All three building possibilities are demonstrated below (directly include source, build static
 # library, build dynamic library).
 #
+# It is assumed that gtest/gtest.h is on a global include path, and the pthread, gtest and
+# gtest_main libraries can be found.
+#
 # Get started by executing 'make list'.
 # Executing 'make' attempts to build all targets.
 
 MAJOR_VERSION = 1
-MINOR_VERSION = 0
-PATCH_VERSION = 1
+MINOR_VERSION = 2
+PATCH_VERSION = 0
 
 SRCDIR = src
+TESTDIR = test
 INCLUDEDIR = src
 BUILDDIR = build
 LIBDIR = lib
@@ -27,13 +31,15 @@ DYNDIR = $(BUILDDIR)/for_dyn_lib
 ENSURE_DIR = @mkdir -p $(@D)
 
 INCLUDES = -I$(INCLUDEDIR)
-LDFLAGS =
+LDFLAGS = -lpthread -lgtest -lgtest_main -L../gtest
 
 DLIB_OBJS = $(DYNDIR)/attitude_estimator.o
 LIB_OBJS = $(BUILDDIR)/attitude_estimator.o
+TEST_OBJS = $(BUILDDIR)/test_attitude_estimator.o
 DLIB_BASENAME = $(LIBDIR)/libattitude_estimator.so
 SLIB_TARGET = $(LIBDIR)/libattitude_estimator.a
 DLIB_TARGET = $(DLIB_BASENAME).$(MAJOR_VERSION).$(MINOR_VERSION).$(PATCH_VERSION)
+TEST_TARGET = $(BINDIR)/test_attitude_estimator
 
 CXX = g++
 AR = ar
@@ -43,7 +49,7 @@ CXXFLAGS = -Wall -g
 # Meta rules
 #
 
-all: libs
+all: libs tests
 
 libs: lib-static lib-dynamic
 
@@ -81,10 +87,30 @@ $(DYNDIR)/%.o: $(SRCDIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -o $@ -c $< $(INCLUDES)
 
 #
+# Unit test rules
+#
+
+run-tests: tests
+	@echo "Running $(TEST_TARGET)..."
+	@./$(TEST_TARGET)
+
+tests: $(TEST_TARGET)
+
+$(TEST_TARGET): $(LIB_OBJS) $(TEST_OBJS)
+	@echo "Building $(TEST_TARGET)..."
+	$(ENSURE_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(BUILDDIR)/%.o: $(TESTDIR)/%.cpp
+	$(ENSURE_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ -c $< $(INCLUDES)
+
+#
 # Dependency rules
 #
 
 $(BUILDDIR)/attitude_estimator.o: $(INCLUDEDIR)/attitude_estimator.h
+$(BUILDDIR)/test_attitude_estimator.o: $(INCLUDEDIR)/attitude_estimator.h
 $(DYNDIR)/attitude_estimator.o: $(INCLUDEDIR)/attitude_estimator.h
 
 #
@@ -95,6 +121,7 @@ clean:
 	rm -f $(BUILDDIR)/*.o $(DYNDIR)/*.o
 	rm -f $(SLIB_TARGET)
 	rm -f $(DLIB_TARGET) $(DLIB_BASENAME).$(MAJOR_VERSION).$(MINOR_VERSION) $(DLIB_BASENAME).$(MAJOR_VERSION) $(DLIB_BASENAME)
+	rm -f $(TEST_TARGET)
 	rm -f *~
 
 clean-hard:

@@ -82,7 +82,7 @@ namespace stateestimation
 	* maintaining its tracking performance (although, incidentally, this balance can be adjusted via the PI gains). In situations like this you
 	* would be right to invest time into signal conditioning and/or tracing the true source of the sensor noise.
 	*
-	* All angles are expressed in radians (e.g. the return values of the `yaw()`, `pitch()` and `roll()` functions, etc...).
+	* All angles are expressed in radians (e.g. the return values of the `eulerYaw()`, `eulerPitch()` and `eulerRoll()` functions, etc...).
 	*
 	* The AttitudeEstimator class can be used as follows:
 	* @code
@@ -90,11 +90,14 @@ namespace stateestimation
 	* AttitudeEstimator Est;
 	*
 	* // Initialise the estimator (e.g. in the class constructor, none of these are actually strictly required for the estimator to work, and can be set at any time)
-	* Est.setMagCalib(0.68, -1.32, 0.0);     // Recommended: Use if you want absolute yaw information as opposed to just relative yaw (Default: (1.0, 0.0, 0.0))
-	* Est.setPIGains(2.2, 2.65, 10, 1.25);   // Recommended: Use if the default gains (shown) do not provide optimal estimator performance (Note: Ki = Kp/Ti)
-	* Est.setQLTime(2.5);                    // Optional: Use if the default quick learning time is too fast or too slow for your application (Default: 3.0)
-	* Est.setAttitude(M_PI, 0.0, 0.0);       // Optional: Use if you have prior knowledge about the orientation of the robot (Default: Identity orientation)
-	* Est.setGyroBias(0.152, 0.041, -0.079); // Optional: Use if you have prior knowledge about the gyroscope bias (Default: (0.0, 0.0, 0.0))
+	* Est.setMagCalib(0.68, -1.32, 0.0);         // Recommended: Use if you want absolute yaw information as opposed to just relative yaw (Default: (1.0, 0.0, 0.0))
+	* Est.setPIGains(2.2, 2.65, 10, 1.25);       // Recommended: Use if the default gains (shown) do not provide optimal estimator performance (Note: Ki = Kp/Ti)
+	* Est.setQLTime(2.5);                        // Optional: Use if the default quick learning time is too fast or too slow for your application (Default: 3.0)
+	* Est.setAttitude(0.5, 0.5, 0.5, 0.5);       // Optional: Use if you have prior knowledge about the orientation of the robot (Default: Identity orientation)
+	* Est.setAttitudeEuler(M_PI, 0.0, 0.0);      // Optional: Use if you have prior knowledge about the orientation of the robot (Default: Identity orientation)
+	* Est.setAttitudeFused(M_PI, 0.0, 0.0, 1.0); // Optional: Use if you have prior knowledge about the orientation of the robot (Default: Identity orientation)
+	* Est.setGyroBias(0.152, 0.041, -0.079);     // Optional: Use if you have prior knowledge about the gyroscope bias (Default: (0.0, 0.0, 0.0))
+	* Est.setAccMethod(Est.ME_FUSED_YAW);        // Optional: Use if you wish to experiment with varying acc-only resolution methods
 	*
 	* // Main loop
 	* while(true)
@@ -104,12 +107,16 @@ namespace stateestimation
 	* 	get_sensor_data(g, a, m);
 	* 	Est.update(0.020, g[0], g[1], g[2], a[0], a[1], a[2], m[0], m[1], m[2]);
 	* 	...
-	* 	cout << "My attitude is (ZYX Euler): (" << Est.yaw() << "," << Est.pitch() << "," << Est.roll() << ")" << endl;
+	* 	double q[4];
+	* 	Est.getAttitude(q);
+	* 	cout << "My attitude is (quaternion): (" << q[0] << "," << q[1] << "," << q[2] << "," << q[3] << ")" << endl;
+	* 	cout << "My attitude is (ZYX Euler): (" << Est.eulerYaw() << "," << Est.eulerPitch() << "," << Est.eulerRoll() << ")" << endl;
+	* 	cout << "My attitude is (fused): (" << Est.fusedYaw() << "," << Est.fusedPitch() << "," << Est.fusedRoll() << "," << (Est.fusedHemi() ? 1 : -1) << ")" << endl;
 	* 	...
 	* 	if(robot_moved_manually_on_field())
 	* 	{
-	* 		Est.reset(true, false);            // Reset into quick learning mode, but preserve the current gyro bias estimate
-	* 		Est.setAttitude(M_PI_2, 0.0, 0.0); // Optional: Use if you have prior knowledge about the new orientation of the robot
+	* 		Est.reset(true, false);                 // Reset into quick learning mode, but preserve the current gyro bias estimate
+	* 		Est.setAttitudeEuler(M_PI_2, 0.0, 0.0); // Optional: Use if you have prior knowledge about the new orientation of the robot
 	* 	}
 	* 	...
 	* }
@@ -118,30 +125,53 @@ namespace stateestimation
 	class AttitudeEstimator
 	{
 	public:
-		// Constants
-		static const double ACC_TOL_SQ = 1e-12*1e-12; //!< @brief If an acc measurement has norm-squared less than this, then it is considered to be faulty and the measurement is discarded.
-		static const double QNORM_TOL_SQ = 1e-12*1e-12; //!< @brief If a supposedly near-unit quaternion has norm-squared less than this during normalisation, then we declare a general state of emergency and completely reset the estimator.
-		static const double XGYG_NORM_TOL_SQ = 1e-12*1e-12; //!< @brief If the norm-squared of the calculated `xG` and/or `yG` basis vectors (`= norm(m_magCalib)*norm(mag)*sin(angle(acc,mag))`) is less than this prior to basis normalisation, then the calculation is assumed to be faulty due to acc/mag collinearity, and the mag measurement is discarded. Note however that this constant is also used for various checks in the `updateQy()` special cases.
-		static const double ZGHAT_ABS_TOL = 1e-12; //!< @brief If the absolute value of components of the `zGhat` vector are less than this, then they are considered to be zero (used deep inside the near-impossible special cases only).
+		// Constants (see attitude_estimator.cpp for the numeric values)
+		static const double ACC_TOL_SQ; //!< @brief If an acc measurement has norm-squared less than this, then it is considered to be faulty and the measurement is discarded.
+		static const double QY_NORM_TOL_SQ; //!< @brief If an acc-only generated quaternion `Qy` has norm-squared less than this, then the quaternion is considered to be zero and a fallback solution is used.
+		static const double QHAT_NORM_TOL_SQ; //!< @brief If a supposedly near-unit quaternion has norm-squared less than this during normalisation, then we declare a general state of emergency and completely reset the estimator.
+		static const double XGYG_NORM_TOL_SQ; //!< @brief If the norm-squared of the calculated `xG` and/or `yG` basis vectors (`= norm(m_magCalib)*norm(mag)*sin(angle(acc,mag))`) is less than this prior to basis normalisation, then the calculation is assumed to be faulty due to acc/mag collinearity, and the mag measurement is discarded. Note however that this constant is also used for various checks in the `updateQy()` special cases.
+		static const double WEZE_NORM_TOL_SQ; //!< @brief If the norm-squared of the `Qhat` vector with its `x` and `y` components zeroed out is less than this, then normalisation is avoided and a fallback method is used instead to generate a unit pure yaw quaternion in the fused yaw acc-only case.
+		static const double ZGHAT_ABS_TOL; //!< @brief If the absolute value of components of the `zGhat` vector are less than this, then they are considered to be zero (used deep inside the near-impossible special cases only).
+
+		//! @brief Acc-only resolution method enumeration.
+		enum AccMethodEnum
+		{
+			ME_DEFAULT = 0,            //!< @brief Default acc-only resolution method (`ME_FUSED_YAW`).
+			ME_FUSED_YAW = ME_DEFAULT, //!< @brief Resolve acc-only cases into full 3D orientations using the relative fused yaw method (default).
+			ME_ABS_FUSED_YAW,          //!< @brief Resolve acc-only cases into full 3D orientations using the absolute fused yaw method.
+			ME_ZYX_YAW,                //!< @brief Resolve acc-only cases into full 3D orientations using the relative ZYX yaw method.
+			ME_COUNT                   //!< @brief Total number of acc-only resolution methods.
+		};
 
 		// Constructor
 		explicit AttitudeEstimator(bool quickLearn = true); //!< @brief Default constructor.
 
 		// Reset functions
-		void reset(bool quickLearn = true, bool resetGyroBias = true); //!< @brief Resets the entire class, except the configuration variables (i.e. the PI gains and the quick learn time) and the magnetometer calibration.
-		void resetAll(bool quickLearn = true); //!< @brief Resets the entire class, including the configuration variables (i.e. the PI gains and the quick learn time) and the magnetometer calibration.
+		void reset(bool quickLearn = true, bool resetGyroBias = true); //!< @brief Resets the entire class, except for the magnetometer calibration, the acc-only resolution method, and the configuration variables (i.e. the PI gains and the quick learn time).
+		void resetAll(bool quickLearn = true); //!< @brief Resets the entire class, including all variables not reset by the `reset()` function.
 	private:
-		void resetState(bool resetGyroBias); // Equivalent to reset(), but leaves the lambda value untouched
+		void resetState(bool resetGyroBias); //!< @brief Equivalent to reset(), but also leaves the lambda value untouched.
 
 	public:
+		// Get/set functions for the acc-only resolution method
+		AccMethodEnum getAccMethod() const { return m_accMethod; } //!< @brief Returns the currently selected acc-only measurement resolution method.
+		void setAccMethod(AccMethodEnum method) { m_accMethod = (method < ME_DEFAULT || method >= ME_COUNT ? ME_DEFAULT : method); } //!< @brief Sets the acc-only measurement resolution method to use.
+
 		// Get/set functions for the current attitude estimate
-		double yaw()   const { return m_Ehat[0]; } //!< @brief Returns the yaw of the current attitude estimate (1st of the three ZYX Euler angles).
-		double pitch() const { return m_Ehat[1]; } //!< @brief Returns the pitch of the current attitude estimate (2nd of the three ZYX Euler angles).
-		double roll()  const { return m_Ehat[2]; } //!< @brief Returns the roll of the current attitude estimate (3rd of the three ZYX Euler angles).
 		void getAttitude(double q[]) const { for(int i = 0;i < 4;i++) q[i] = m_Qhat[i]; } //!< @brief Returns the current attitude estimate in the quaternion form (w,x,y,z) (Note: `q[]` must have room for 4 elements).
 		void setAttitude(const double q[]) { setAttitude(q[0], q[1], q[2], q[3]); } //!< @brief Resets the current attitude estimate to a particular quaternion orientation (Note: `q[]` must have 4 elements, `q[]` is normalised, if `q[]` has zero norm then the attitude estimate is reset to the identity orientation).
-		void setAttitude(double yaw, double pitch, double roll); //!< @brief Resets the current attitude estimate to a particular set of ZYX Euler angles.
 		void setAttitude(double w, double x, double y, double z); //!< @brief Resets the current attitude estimate to a particular quaternion orientation (Note: `q[]` is normalised, if `q[]` has zero norm then the attitude estimate is reset to the identity orientation).
+		void setAttitudeEuler(double yaw, double pitch, double roll); //!< @brief Resets the current attitude estimate to a particular set of ZYX Euler angles.
+		void setAttitudeFused(double yaw, double pitch, double roll, bool hemi); //!< @brief Resets the current attitude estimate to a particular set of fused angles.
+
+		// Get functions for the current attitude estimate in alternative representations
+		double eulerYaw()   { if(!m_eulerValid) { updateEuler(); } return m_Ehat[0];  } //!< @brief Returns the ZYX Euler yaw of the current attitude estimate (1st of the three ZYX Euler angles).
+		double eulerPitch() { if(!m_eulerValid) { updateEuler(); } return m_Ehat[1];  } //!< @brief Returns the ZYX Euler pitch of the current attitude estimate (2nd of the three ZYX Euler angles).
+		double eulerRoll()  { if(!m_eulerValid) { updateEuler(); } return m_Ehat[2];  } //!< @brief Returns the ZYX Euler roll of the current attitude estimate (3rd of the three ZYX Euler angles).
+		double fusedYaw()   { if(!m_fusedValid) { updateFused(); } return m_Fhat[0];  } //!< @brief Returns the fused yaw of the current attitude estimate (1st of the fused angles).
+		double fusedPitch() { if(!m_fusedValid) { updateFused(); } return m_Fhat[1];  } //!< @brief Returns the fused pitch of the current attitude estimate (2nd of the fused angles).
+		double fusedRoll()  { if(!m_fusedValid) { updateFused(); } return m_Fhat[2];  } //!< @brief Returns the fused roll of the current attitude estimate (3rd of the fused angles).
+		bool   fusedHemi()  { if(!m_fusedValid) { updateFused(); } return m_FhatHemi; } //!< @brief Returns the hemisphere of the current attitude estimate (boolean 4th parameter of the fused angles representation, where `true` implies `1` and `false` implies `-1`).
 
 		// Get/set functions for the gyroscope bias
 		void getGyroBias(double b[]) const { for(int i = 0;i < 3;i++) b[i] = m_bhat[i]; } //!< @brief Returns the current estimated gyro bias (Note: `b[]` must have room for 3 elements).
@@ -155,31 +185,35 @@ namespace stateestimation
 
 		// Get/set functions for the quick learning lambda parameter
 		double getLambda() const { return m_lambda; } //!< @brief Returns the current value of the quick learning parameter, &lambda;. This will always be on the unit interval `[0,1]`, and specifies the factor for linear interpolation between the standard (`Kp`, `Ti`) and quick learning (`KpQuick`, `TiQuick`) PI gains. &lambda; is auto-incremented in each call to `update()` in inverse proportion to `QLTime`.
-		void resetLambda() { setLambda(0.0); } //!< @brief Restarts (activates) quick learning by setting &lambda; to zero.
-		void setLambda(double value = 1.0) { m_lambda = (value >= 1.0 ? 1.0 : (value <= 0.0 ? 0.0 : value)); } //!< @brief Sets &lambda; to the desired value, by default this is `1.0`, which turns quick learning off. Values outside of `[0,1]` are coerced.
+		void   resetLambda() { setLambda(0.0); } //!< @brief Restarts (activates) quick learning by setting &lambda; to zero.
+		void   setLambda(double value = 1.0) { m_lambda = (value >= 1.0 ? 1.0 : (value <= 0.0 ? 0.0 : value)); } //!< @brief Sets &lambda; to the desired value, by default this is `1.0`, which turns quick learning off. Values outside of `[0,1]` are coerced.
 
 		// Get/set functions for the configuration variables
-		void getPIGains(double &Kp, double &Ti, double &KpQuick, double &TiQuick); //!< @brief Returns the currently set attitude estimator PI gains. Refer to `getLambda()` for more information on the PI gains (Note: The values are passed out of this function via the four reference parameters).
-		void setPIGains(double Kp, double Ti, double KpQuick, double TiQuick); //!< @brief Sets the PI gains to use in both normal situations and for quick learning (Note: Each `Kp/Ti` pair must be a pair of positive values or the respective pair is not updated).
+		void   getPIGains(double &Kp, double &Ti, double &KpQuick, double &TiQuick); //!< @brief Returns the currently set attitude estimator PI gains. Refer to `getLambda()` for more information on the PI gains (Note: The values are passed out of this function via the four reference parameters).
+		void   setPIGains(double Kp, double Ti, double KpQuick, double TiQuick); //!< @brief Sets the PI gains to use in both normal situations and for quick learning (Note: Each `Kp/Ti` pair must be a pair of positive values or the respective pair is not updated).
 		double getQLTime() const { return m_QLTime; } //!< @brief Returns the currently set quick learning time. A rate at which to auto-increment &lambda; is calculated so that quick learning fades over into standard operation in exactly `QLTime` seconds.
-		void setQLTime(double QLTime) { if(QLTime > 0.0) m_QLTime = QLTime; } //!< @brief Sets the quick learning time to use. See `getQLTime()` for more details (Note: Non-positive values of `QLTime` are ignored by this function).
+		void   setQLTime(double QLTime) { if(QLTime > 0.0) m_QLTime = QLTime; } //!< @brief Sets the quick learning time to use. See `getQLTime()` for more details (Note: Non-positive values of `QLTime` are ignored by this function).
 
 		// Public estimation update functions
 		void update(double dt, double gyroX, double gyroY, double gyroZ, double accX, double accY, double accZ, double magX, double magY, double magZ); //!< @brief Updates the current attitude estimate based on new sensor measurements and the amount of elapsed time since the last update.
 
 #ifndef ATT_EST_PRIVATE_ARE_AVAILABLE
-	private: // <-- This private accessor can be temporarily pre-processored out in order to be able to run the special tests in test_attitude_estimator.cpp!
+	private: // <-- This private accessor can be pre-processored out in order to be able to run the special tests in test_attitude_estimator.cpp!
 #endif
 		// Private estimation update functions
-		void updateQy(double accX, double accY, double accZ, double magX, double magY, double magZ); // Calculates a "measured orientation" based on the given sensor measurements.
-		void updateEuler(); // Takes the current value of m_Qhat, converts it into Euler angles, and stores the result in m_Ehat. Should be called internally by this class every time m_Qhat is modified.
+		void updateQy(double accX, double accY, double accZ, double magX, double magY, double magZ); // Calculates a 'measured' orientation based on given sensor measurements
+		void updateEuler(); // Takes the current value of m_Qhat, converts it into Euler angles, and stores the result in m_Ehat
+		void updateFused(); // Takes the current value of m_Qhat, converts it into fused angles, and stores the result in m_Fhat and m_FhatHemi
+
+		// Acc-only measurement resolution method
+		AccMethodEnum m_accMethod; // The method to use if we cannot use a mag measurement to resolve the corresponding acc measurement into a full 3D orientation
 
 		// Configuration variables
-		double m_Kp; // Kp for standard operation (at lambda = 1)
-		double m_Ti; // Ti for standard operation (at lambda = 1)
+		double m_Kp;      // Kp for standard operation (at lambda = 1)
+		double m_Ti;      // Ti for standard operation (at lambda = 1)
 		double m_KpQuick; // Kp for quick learning (at lambda = 0)
 		double m_TiQuick; // Ti for quick learning (at lambda = 0)
-		double m_QLTime; // The nominal duration of quick learning when lambda is reset to zero
+		double m_QLTime;  // The nominal duration of quick learning when lambda is reset to zero
 
 		// Magnetometer calibration
 		double m_magCalib[3]; // The mag value corresponding to/calibrated at the identity orientation
@@ -190,7 +224,10 @@ namespace stateestimation
 		double m_dQ[4], m_dQold[4]; // Quaternion derivatives: Format is (dw,dx,dy,dz)
 		double m_w[3], m_wold[3], m_bhat[3], m_omega[3], m_base[3]; // 3D vectors: Format is (x,y,z)
 		double m_Ry[9]; // Rotation matrix: The numbering of the 3x3 matrix entries is left to right, top to bottom
-		double m_Ehat[3]; // Euler angles: Format is (phi,theta,psi) = (yaw,pitch,roll) and follows the ZYX convention
+		double m_Ehat[3]; // Euler angles: Format is (psi,theta,phi) = (yaw,pitch,roll) and follows the ZYX convention
+		double m_Fhat[3]; // Fused angles: Format is (psi,theta,phi) = (yaw,pitch,roll) and follows the standard definition of fused angles
+		bool   m_FhatHemi; // Fused angles: Extra fourth hemisphere parameter, true is taken to mean 1 (positive z hemisphere), and false is taken to mean -1 (negative z hemisphere)
+		bool   m_eulerValid, m_fusedValid; // Flags specifying whether the currently stored Euler and fused angle representations are up to date with the quaternion stored in m_Qhat
 	};
 }
 
