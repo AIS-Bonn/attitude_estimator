@@ -1,6 +1,6 @@
 *~
 .*
-doc/out
-build
-lib
-bin
+/doc/out
+/build
+/lib
+/bin
