@@ -27,6 +27,10 @@ capabilities and usage caveats.
 Attitude Estimator was developed as part of the
 [NimbRo-OP](http://www.nimbro.net/OP/) project at the University of Bonn.
 
+The library has been unofficially ported to [Go](https://go.dev/), thanks to
+[knei-knurow](https://github.com/knei-knurow), and is available
+[here](https://github.com/knei-knurow/attestimator).
+
 ## Feature List
 
 - Small and highly efficient performance-oriented cross-platform C++ library
