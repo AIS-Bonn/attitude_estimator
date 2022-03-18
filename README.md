@@ -125,8 +125,7 @@ and should thus be fairly self-explanatory. A good starting point is
 ### Where To Get More Help?
 
 If neither the Doxygen documentation nor a look into the source code can resolve
-your issues for whatever reason, you can contact the author at the email address
-given in the _Bugs and Improvements_ section.
+your issues for whatever reason, you can open a GitHub issue.
 
 ## Bugs and Improvements
 
