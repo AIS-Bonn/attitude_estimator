@@ -2,9 +2,9 @@
 
 **Author:** Philipp Allgeuer
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 
-**Date:** 14/08/2014
+**Date:** 18/03/2022
 
 ## General Overview
 
@@ -76,7 +76,7 @@ Due to the small and efficient nature of the library, one of the first two
 options is recommended. Very minimal benefit is expected from building a dynamic
 library.
 
-Note that as at release `v1.2.0`, the required (non-test) source files are
+Note that as at release `v1.2.1`, the required (non-test) source files are
 simply `attitude_estimator.h` and `attitude_estimator.cpp`.
 
 A sample makefile for building the static and dynamic libraries using `gcc` is
@@ -130,8 +130,6 @@ given in the _Bugs and Improvements_ section.
 
 ## Bugs and Improvements
 
-I welcome all feedback, suggestions and bug reports. If you improve or fix
-anything about the library then I encourage you to let me know so that the
-library can be improved for everyone!
-
-**Email:** `pallgeuer[at]ais.uni-bonn.de`
+I welcome all feedback, suggestions and bug reports (by opening a GitHub issue).
+If you improve or fix anything about the library then I encourage you to let me
+know so that the library can be improved for everyone!
